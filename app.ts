@@ -153,8 +153,8 @@ bot.on("message", async (ctx) => {
    await ctx.reply("请联系客服",{reply_markup: services})
 });
 
-// Deno.addSignalListener("SIGINT", () => bot.stop());
-// Deno.addSignalListener("SIGTERM", () => bot.stop());
+Deno.addSignalListener("SIGINT", () => bot.stop());
+Deno.addSignalListener("SIGTERM", () => bot.stop());
 
 //长轮询启动
 bot.start();
