@@ -1,8 +1,12 @@
 import { Bot, InlineKeyboard, webhookCallback } from "https://deno.land/x/grammy@v1.36.1/mod.ts";
 import { Menu } from "https://deno.land/x/grammy_menu@v1.3.0/mod.ts";
 
-// 创建Bot
-const bot = new Bot("8165542468:AAEvsa-878cg_hM0yr1blOiS2qTGXbNocW4"); 
+// 从环境变量获取 Bot Token
+const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
+if (!BOT_TOKEN) {
+    throw new Error("BOT_TOKEN 环境变量未设置！");
+}
+const bot = new Bot(BOT_TOKEN);
 
 const handleUpdate = webhookCallback(bot, "std/http");
 
