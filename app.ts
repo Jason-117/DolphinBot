@@ -1,30 +1,10 @@
 import { Bot, InlineKeyboard, webhookCallback } from "https://deno.land/x/grammy@v1.36.1/mod.ts";
 import { Menu } from "https://deno.land/x/grammy_menu@v1.3.0/mod.ts";
-import { Application } from "https://deno.land/x/oak/mod.ts";
-
-const app = new Application(); // 或者其它你正在使用的
 
 // 创建Bot
 const bot = new Bot("8165542468:AAEvsa-878cg_hM0yr1blOiS2qTGXbNocW4"); 
 
-// 确保指定你使用的框架。
-app.use(webhookCallback(bot, "oak"));
-
 const handleUpdate = webhookCallback(bot, "std/http");
-
-Deno.serve(async (req) => {
-  if (req.method === "POST") {
-    const url = new URL(req.url);
-    if (url.pathname.slice(1) === bot.token) {
-      try {
-        return await handleUpdate(req);
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  }
-  return new Response();
-});
 
 interface CallbackData {
     action: string;
@@ -177,3 +157,17 @@ bot.on("message", async (ctx) => {
 
 Deno.addSignalListener("SIGINT", () => bot.stop());
 Deno.addSignalListener("SIGTERM", () => bot.stop());
+
+Deno.serve(async (req) => {
+  if (req.method == "POST") {
+    const url = new URL(req.url);
+    if (url.pathname.slice(1) == bot.token) {
+      try {
+        return await handleUpdate(req);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+  return new Response();
+});
