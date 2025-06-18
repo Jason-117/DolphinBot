@@ -149,16 +149,43 @@ bot.on("message", async (ctx) => {
 Deno.addSignalListener("SIGINT", () => bot.stop());
 Deno.addSignalListener("SIGTERM", () => bot.stop());
 
-Deno.serve(async (req) => {
-  if (req.method == "POST") {
-    const url = new URL(req.url);
-    if (url.pathname.slice(1) == bot.token) {
-      try {
-        return await handleUpdate(req);
-      } catch (err) {
-        console.error(err);
-      }
+//处理 /users 路径，返回所有用户数据
+async function handleUsersRequest(req: Request): Promise<Response> {
+    const users: any[] = [];
+    try {
+        for await (const entry of kv.list({ prefix: ["users"] })) {
+            users.push(entry.value);
+        }
+        return new Response(JSON.stringify(users), {
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }, // 添加 CORS 头
+        });
+    } catch (error) {
+        console.error("从 Deno KV 获取用户数据失败:", error);
+        return new Response(JSON.stringify({ error: "无法获取用户数据" }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        });
     }
-  }
-  return new Response();
+}
+
+Deno.serve(async (req) => {
+    const url = new URL(req.url);
+
+    // Telegram webhook 路由
+    if (req.method == "POST" && url.pathname.slice(1) == bot.token) {
+        try {
+            return await handleUpdate(req);
+        } catch (err) {
+            console.error(err);
+            return new Response("Webhook Error", { status: 500 });
+        }
+    }
+
+    // 新增：用户数据 API 路由
+    if (req.method == "GET" && url.pathname == "/users") {
+        return await handleUsersRequest(req);
+    }
+
+    // 默认返回一个空响应或 404
+    return new Response("Not Found", { status: 404 });
 });
