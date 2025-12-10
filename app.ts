@@ -82,7 +82,7 @@ const products = new Menu("products")
     .url("Viber营销平台","https://t.me/Dolphin_guanfang")
     .text("介绍",async (ctx)=>{
         await sendProductIntroduction(ctx,'Viber营销平台\n对在Viber上有营销需求的用户提供快速获客渠道以及账号支持\n协议拉群：支持各国拉群业务，速度稳定，风控响应及时；\n协议群发：支持各国发送业务，精准触达、到达进线稳定；\n平台账号：支持各国频道号、直登号。')
-    })
+    }).row()
     .back("返回");
 
 // 注册设置菜单到主菜单。
