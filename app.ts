@@ -2,12 +2,20 @@ import { Bot, InlineKeyboard, webhookCallback } from "https://deno.land/x/grammy
 import { Menu } from "https://deno.land/x/grammy_menu@v1.3.0/mod.ts";
 
 const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
+const ADMIN_ID = Deno.env.get("ADMIN_ID");
 if (!BOT_TOKEN) {
     throw new Error("BOT_TOKEN 环境变量未设置！");
 }
+if(!ADMIN_ID){
+    throw new Error("ADMIN_ID 环境变量未设置！");
+}
 const bot = new Bot(BOT_TOKEN);
+const admin_id = parseInt(ADMIN_ID);
 
 const kv = await Deno.openKv();
+
+//会话活跃时间
+const active = 6000 ;
 
 const handleUpdate = webhookCallback(bot, "std/http");
 
@@ -16,6 +24,16 @@ interface CallbackData {
     messageId?: number;
     chatId?: number;
     product?: string; // 用于标识点击了哪个产品介绍按钮
+}
+
+//回复
+interface ReplyContext{
+    targetUserId:number;
+}
+
+//对 "_" 进行转义
+function escapeUnderscore(text: string): string {
+    return text.replace(/_/g, '\\_');
 }
 
 // 发送产品介绍
@@ -57,7 +75,7 @@ const products = new Menu("products")
     }).row()
     .url("TG营销平台","https://t.me/Dolphin_guanfang")
     .text("介绍",async (ctx) => {
-        await sendProductIntroduction(ctx,'TG营销平台 \n对在Telegram上有营销需求的用户提供快速获客渠道以及账号支持\n协议拉群：支持各国拉群业务，速度稳定，风控响应及时；\n协议群发：支持各国发送业务，多类发送模式，普通私信、普通图文、名片私信、PostBot私信精准触达，进线稳定；\n平台账号：支持各国协议号、直登号、Tdata。协议号支持各类工具以及云控登录使用，直登号支持各类设备手动登录，Tdata支持PC端多登以及部分云控登录使用。');
+        await sendProductIntroduction(ctx,'TG营销平台\n对在Telegram上有营销需求的用户提供快速获客渠道以及账号支持\n协议拉群：支持各国拉群业务，速度稳定，风控响应及时；\n协议群发：支持各国发送业务，多类发送模式，普通私信、普通图文、名片私信、PostBot私信精准触达，进线稳定；\n平台账号：支持各国协议号、直登号、Tdata。协议号支持各类工具以及云控登录使用，直登号支持各类设备手动登录，Tdata支持PC端多登以及部分云控登录使用。');
     }).row()
     .url("Dolphin筛选中心","https://www.duofendata.com/login/")
     .text("介绍",async (ctx) => {
@@ -109,44 +127,191 @@ bot.callbackQuery("delete_message", async (ctx) => {
     }
 });
 
+// 处理 管理员回复 的回调
+bot.callbackQuery(/^reply:(\d+):(\d+)$/, async (ctx) =>{
+    //判断是否是管理员
+    if(ctx.from?.id !== admin_id){
+        return ctx.answerCallbackQuery("非管理员");
+    }
+    try{
+        //解析用户ID和消息ID
+        const parts = ctx.match[0].split(':');
+        // parts = ["reply", "CHAT_ID", "MESSAGE_ID"]
+        const userChatId = parseInt(parts[1]);
+
+        //消息存储至 Deno KV 
+        const context : ReplyContext = { targetUserId : userChatId};
+        await kv.set(["reply_context",admin_id], context,{expireIn : active});
+
+        //存储对话活跃时间
+        await kv.set(["active_chat",userChatId],{adminId :admin_id} ,{expireIn : active })
+
+        //给管理员回复提示
+        const replyInstruction = `回复消息：`
+
+        await ctx.reply(
+            replyInstruction,
+            {
+                parse_mode:"Markdown",
+                reply_markup:new InlineKeyboard().text("取消回复","cancel_reply")
+            }
+        );
+    } catch (error) {
+        console.error("存储消息失败：",error);
+        await ctx.answerCallbackQuery({text:"回复失败",show_alert:true});
+    }
+});
+
+//取消回复按钮
+bot.callbackQuery("cancel_reply",async (ctx) =>{
+    if (ctx.from?.id !== admin_id) return;
+    try{
+        const contextResult = await kv.get<ReplyContext>(["reply_context",admin_id]);
+        const targetUserId = contextResult.value?.targetUserId;
+
+        await kv.delete(["reply_context",admin_id]);
+        if(targetUserId){
+            await kv.delete(["active_chat",targetUserId]);
+        }
+
+        await ctx.answerCallbackQuery("退出回复");
+    }catch(error){
+        console.error(error);
+        await ctx.answerCallbackQuery("取消回复失败");
+    }
+});
+
 //处理start
 bot.command("start", async (ctx) => {
-    const userId = ctx.from?.id;
-    const username = ctx.from?.username;
-    const firstName = ctx.from?.first_name;
-    const lastName = ctx.from?.last_name;
+    console.log(`触发start`);
+    if(ctx.from?.id == admin_id){
+        await ctx.reply("管理员");
+    }else{
+        const userId = ctx.from?.id;
+        const username = ctx.from?.username;
+        const firstName = ctx.from?.first_name;
+        const lastName = ctx.from?.last_name;
 
-    if (userId) {
-        // 将用户信息存储到 Deno KV 数据库
-        await kv.set(["users", userId], {
-            username: username,
-            firstName: firstName,
-            lastName: lastName,
-            lastInteraction: new Date().toISOString(), // 记录最后一次交互时间
-        });
-        console.log(`用户 ${userId} (${username || '未知'}) 信息已保存。`);
+        if (userId) {
+            // 将用户信息存储到 Deno KV 数据库
+            await kv.set(["users", userId], {
+                username: username,
+                firstName: firstName,
+                lastName: lastName,
+                lastInteraction: new Date().toISOString(), // 记录最后一次交互时间
+            });
+            console.log(`用户 ${userId} (${username || '未知'}) 信息已保存。`);
+        }
+        //发送产品图
+        await ctx.replyWithPhoto("https://ibb.co/kVWrtsrB")
+        // 发送菜单。
+        await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！", { reply_markup: menu });
     }
-    
-  //发送产品图
-  await ctx.replyWithPhoto("https://ibb.co/kVWrtsrB")
-  // 发送菜单。
-  await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！", { reply_markup: menu });
-//photo(media: string | InputFile, options: InputMediaOptions<InputMediaPhoto>): InputMediaPhoto; 
 });
 
-//处理command1，即start
-bot.command("command1", async (ctx) => {
-    await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！", { reply_markup: menu })
+bot.command("exit", async (ctx) =>{
+    if (ctx.from?.id !== admin_id) return;
+
+    const contextResult = await kv.get<ReplyContext>(["reply_context",admin_id]);
+    const targetUserId = contextResult.value?.targetUserId;
+
+    try{
+        await kv.delete(["reply_context",admin_id]);
+        if(targetUserId){
+            await kv.delete(["active_chat",targetUserId]);
+        }
+        await ctx.reply("已退出会话",{reply_to_message_id:ctx.message?.message_id})
+    }catch(error){
+        await ctx.reply("退出会话失败",{reply_to_message_id:ctx.message?.message_id})
+    }
 });
 
-//关键词回复
-bot.hears(/[TG飞机WS协议直登筛选过滤云控]/, async (ctx) => {
-    await ctx.reply("请联系客服注册平台账号",{reply_markup: services})
-});
 
-// 处理其他的消息。
+// 处理其他的消息并将消息推送至管理员
 bot.on("message", async (ctx) => {
-   await ctx.reply("请联系客服",{reply_markup: services})
+    const userId = ctx.from.id;
+    const chatId = ctx.chat.id;
+    const messageId = ctx.message.message_id;
+    const username = ctx.from.username;
+
+    //处理管理员消息
+    if(userId == admin_id){
+        //检测是否有上下文
+        const contextResult = await kv.get<ReplyContext>(['reply_context',admin_id]);
+        if(contextResult.value){
+            const targetUserId = contextResult.value.targetUserId;
+            const replyText = `消息来自人工客服：\n${ctx.message.text}`;
+
+            try{
+                const context : ReplyContext = { targetUserId : targetUserId};
+                await kv.set(["reply_text",admin_id],context,{expireIn : active});
+                await kv.set(["active",targetUserId],{admin:admin_id});
+                //将回复消息发送至用户
+                await bot.api.sendMessage(targetUserId,replyText,{
+                    parse_mode:"Markdown"
+                });
+
+                //清除上下文消息
+                await kv.delete(["reply_context",admin_id]);
+
+                //回复结果反馈至管理员
+                await ctx.reply(`已发送至用户`,{reply_to_message_id:ctx.message.message_id});
+                return;
+            }catch(error){
+                console.error("发送消息失败",error);
+                await kv.delete(["reply_conext",admin_id]);
+                await ctx.reply("回复失败");
+                return;
+            }
+        }
+    }
+    // 处理普通用户消息
+    if (userId !== admin_id){
+        //判断当前会话是否在活跃时间内
+        const activeChat = await kv.get(["active_chat",userId]);
+        const isChatActive = activeChat.value !== null;
+        //转义用户名
+        const escapedUsername = escapeUnderscore(username || '无用户名');
+        //转义用户消息
+        const escapedUserText = escapeUnderscore(ctx.message.text || '');
+
+        const userText = `新消息来自  @${escapedUsername}\n`;
+
+        const replyKeyboard = new InlineKeyboard()
+        .text("回复用户",`reply:${chatId}:${messageId}`).row()
+        .url("联系用户",`https://t.me/${ctx.from.username}`);
+
+        try{
+            if(ctx.message.text){
+                const fullText = userText + escapedUserText;
+                await bot.api.sendMessage(admin_id,fullText,{
+                    parse_mode:"Markdown",
+                    reply_markup:replyKeyboard
+                });
+            }else if(ctx.message.photo || ctx.message.video || ctx.message.document){
+                await bot.api.copyMessage(
+                    admin_id,
+                    chatId,
+                    messageId,
+                    {
+                        caption:userText + escapedUserText,
+                        parse_mode:"Markdown",
+                        reply_markup:replyKeyboard
+                    }
+                );
+            }else{
+                await ctx.forwardMessage(admin_id);
+                await bot.api.sendMessage(admin_id,`点击下方回复按钮进行回复`,{parse_mode:"Markdown",reply_markup:replyKeyboard});
+            }
+            //给非活跃内的会话发送自动回复
+            if(!isChatActive){
+                await ctx.reply("您的消息已发送至人工客户，请耐心等待~");
+            }
+        } catch(error){
+            console.error("发送至管理员失败",error);
+            await ctx.reply("当前服务繁忙，请点击下方按钮联系客服",{reply_markup:services});
+        }
+    }
 });
 
 Deno.addSignalListener("SIGINT", () => bot.stop());
