@@ -15,7 +15,7 @@ const admin_id = parseInt(ADMIN_ID);
 const kv = await Deno.openKv();
 
 //会话活跃时间
-const active = 6000 ;
+const active = 1800000 ;
 
 const handleUpdate = webhookCallback(bot, "std/http");
 
