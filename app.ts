@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, webhookCallback } from "https://deno.land/x/grammy@v1.36.1/mod.ts";
+import { Bot, Context, InlineKeyboard, webhookCallback } from "https://deno.land/x/grammy@v1.36.1/mod.ts";
 import { Menu } from "https://deno.land/x/grammy_menu@v1.3.0/mod.ts";
 
 const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
@@ -9,13 +9,18 @@ if (!BOT_TOKEN) {
 if(!ADMIN_ID){
     throw new Error("ADMIN_ID 环境变量未设置！");
 }
+console.log(BOT_TOKEN);
+console.log(ADMIN_ID);
 const bot = new Bot(BOT_TOKEN);
 const admin_id = parseInt(ADMIN_ID);
 
 const kv = await Deno.openKv();
 
-//会话活跃时间
+//会话活跃时间 30分钟
 const active = 1800000 ;
+
+//回复等待时间 20分钟
+const waitTime = 1200000 ;
 
 const handleUpdate = webhookCallback(bot, "std/http");
 
@@ -181,6 +186,7 @@ bot.callbackQuery("cancel_reply",async (ctx) =>{
     }
 });
 
+
 //处理start
 bot.command("start", async (ctx) => {
     console.log(`触发start`);
@@ -205,7 +211,7 @@ bot.command("start", async (ctx) => {
         //发送产品图
         await ctx.replyWithPhoto("https://ibb.co/kVWrtsrB")
         // 发送菜单。
-        await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！", { reply_markup: menu });
+        await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！\n（如需咨询详情或获取个性化方案，请回复‘人工+产品编号’，我们会为您安排专属客服提供1对1支持❤）", { reply_markup: menu });
     }
 });
 
@@ -226,6 +232,10 @@ bot.command("exit", async (ctx) =>{
     }
 });
 
+//处理command1，即start
+bot.command("command1", async (ctx) => {
+    await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！\n（如需咨询详情或获取个性化方案，请回复‘人工+产品编号’，我们会为您安排专属客服提供1对1支持❤）", { reply_markup: menu })
+});
 
 // 处理其他的消息并将消息推送至管理员
 bot.on("message", async (ctx) => {
@@ -234,13 +244,16 @@ bot.on("message", async (ctx) => {
     const messageId = ctx.message.message_id;
     const username = ctx.from.username;
 
+    //获取消息
+    const messageText = ctx.message.text?ctx.message.text.toLowerCase():'';
+
     //处理管理员消息
     if(userId == admin_id){
         //检测是否有上下文
         const contextResult = await kv.get<ReplyContext>(['reply_context',admin_id]);
         if(contextResult.value){
             const targetUserId = contextResult.value.targetUserId;
-            const replyText = `消息来自人工客服：\n${ctx.message.text}`;
+            const replyText = `${ctx.message.text}`;
 
             try{
                 const context : ReplyContext = { targetUserId : targetUserId};
@@ -267,9 +280,35 @@ bot.on("message", async (ctx) => {
     }
     // 处理普通用户消息
     if (userId !== admin_id){
+
+        //判断消息是否包含"人工"
+        const isRequest = messageText.includes("人工");
+
         //判断当前会话是否在活跃时间内
         const activeChat = await kv.get(["active_chat",userId]);
         const isChatActive = activeChat.value !== null;
+
+        //判断当前会话是否处于等待期间
+        const chatWait = await kv.get(["chat_wait",userId]);
+        const isWait = chatWait.value != null;
+
+        //判断消息是否转发至管理员
+        //1.当会话为非活跃时，只有包含"人工"的消息才会转发至管理员
+        //2.会话为活跃时，直接转发
+        const messageToAdmin = isChatActive || isRequest;
+
+        //非活跃对话，且处于等待期
+        if(!messageToAdmin && isWait){
+            await ctx.reply("消息已发送至客服，请您耐心等待");
+            return;
+        }
+
+        //不需要转发，返回提示
+        if(!messageToAdmin){
+            ctx.reply("如需客服帮助，请回复'人工+产品编号'");
+            return;
+        }
+
         //转义用户名
         const escapedUsername = escapeUnderscore(username || '无用户名');
         //转义用户消息
@@ -303,14 +342,16 @@ bot.on("message", async (ctx) => {
                 await ctx.forwardMessage(admin_id);
                 await bot.api.sendMessage(admin_id,`点击下方回复按钮进行回复`,{parse_mode:"Markdown",reply_markup:replyKeyboard});
             }
-            //给非活跃内的会话发送自动回复
+            //给非活跃内的会话发送自动回复，设置等待键
             if(!isChatActive){
+                await kv.set(['chat_wait',userId],{timestamp:Date.now()},{expireIn:waitTime});
                 await ctx.reply("您的消息已发送至人工客户，请耐心等待~");
             }
         } catch(error){
             console.error("发送至管理员失败",error);
             await ctx.reply("当前服务繁忙，请点击下方按钮联系客服",{reply_markup:services});
         }
+
     }
 });
 
@@ -325,13 +366,13 @@ async function handleUsersRequest(req: Request): Promise<Response> {
             users.push(entry.value);
         }
         return new Response(JSON.stringify(users), {
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }, // 添加 CORS 头
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
         });
     } catch (error) {
         console.error("从 Deno KV 获取用户数据失败:", error);
         return new Response(JSON.stringify({ error: "无法获取用户数据" }), {
             status: 500,
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
         });
     }
 }
