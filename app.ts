@@ -9,8 +9,7 @@ if (!BOT_TOKEN) {
 if(!ADMIN_ID){
     throw new Error("ADMIN_ID 环境变量未设置！");
 }
-console.log(BOT_TOKEN);
-console.log(ADMIN_ID);
+
 const bot = new Bot(BOT_TOKEN);
 const admin_id = parseInt(ADMIN_ID);
 
@@ -189,7 +188,6 @@ bot.callbackQuery("cancel_reply",async (ctx) =>{
 
 //处理start
 bot.command("start", async (ctx) => {
-    console.log(`触发start`);
     if(ctx.from?.id == admin_id){
         await ctx.reply("管理员");
     }else{
@@ -206,7 +204,6 @@ bot.command("start", async (ctx) => {
                 lastName: lastName,
                 lastInteraction: new Date().toISOString(), // 记录最后一次交互时间
             });
-            console.log(`用户 ${userId} (${username || '未知'}) 信息已保存。`);
         }
         //发送产品图
         await ctx.replyWithPhoto("https://ibb.co/kVWrtsrB")
