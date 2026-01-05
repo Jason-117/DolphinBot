@@ -311,6 +311,8 @@ bot.on("message", async (ctx) => {
         //转义用户消息
         const escapedUserText = escapeUnderscore(ctx.message.text || '');
 
+        console.log("消息转发至管理");
+        
         const userText = `新消息来自  @${escapedUsername}\n`;
 
         const replyKeyboard = new InlineKeyboard()
