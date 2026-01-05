@@ -3,6 +3,8 @@ import { Menu } from "https://deno.land/x/grammy_menu@v1.3.0/mod.ts";
 
 const BOT_TOKEN = Deno.env.get("BOT_TOKEN");
 const ADMIN_ID = Deno.env.get("ADMIN_ID");
+const ADMIN_TOKEN = Deno.env.get("ADMIN_TOKEN") || "fallback-secret-token";
+
 if (!BOT_TOKEN) {
     throw new Error("BOT_TOKEN 环境变量未设置！");
 }
@@ -359,17 +361,33 @@ Deno.addSignalListener("SIGTERM", () => bot.stop());
 
 //处理 /users 路径，返回所有用户数据
 async function handleUsersRequest(req: Request): Promise<Response> {
+    const authHeader = req.headers.get("Authorization");
+    
+    if (authHeader !== `Bearer ${ADMIN_TOKEN}`) {
+        return new Response(JSON.stringify({ error: "Unauthorized: 无效的 Token" }), {
+            status: 401,
+            headers: { 
+                "Content-Type": "application/json", 
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Authorization"
+            }
+        });
+    }
+
     const users: any[] = [];
     try {
         for await (const entry of kv.list({ prefix: ["users"] })) {
             users.push(entry.value);
         }
         return new Response(JSON.stringify(users), {
-            headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
+            headers: { 
+                "Content-Type": "application/json", 
+                "Access-Control-Allow-Origin": "*" 
+            }
         });
     } catch (error) {
-        console.error("从 Deno KV 获取用户数据失败:", error);
-        return new Response(JSON.stringify({ error: "无法获取用户数据" }), {
+        console.error("获取数据失败:", error);
+        return new Response(JSON.stringify({ error: "Internal Server Error" }), {
             status: 500,
             headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" }
         });
@@ -379,21 +397,24 @@ async function handleUsersRequest(req: Request): Promise<Response> {
 Deno.serve(async (req) => {
     const url = new URL(req.url);
 
-    // Telegram webhook 路由
-    if (req.method == "POST" && url.pathname.slice(1) == bot.token) {
-        try {
-            return await handleUpdate(req);
-        } catch (err) {
-            console.error(err);
-            return new Response("Webhook Error", { status: 500 });
-        }
+    if (req.method === "OPTIONS") {
+        return new Response(null, {
+            status: 204,
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, OPTIONS",
+                "Access-Control-Allow-Headers": "Authorization, Content-Type"
+            }
+        });
     }
 
-    // 新增：用户数据 API 路由
+    if (req.method == "POST" && url.pathname.slice(1) == bot.token) {
+        try { return await handleUpdate(req); } catch (err) { return new Response("Error", { status: 500 }); }
+    }
+
     if (req.method == "GET" && url.pathname == "/users") {
         return await handleUsersRequest(req);
     }
 
-    // 默认返回一个空响应或 404
     return new Response("Not Found", { status: 404 });
 });
