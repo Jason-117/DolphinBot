@@ -210,7 +210,7 @@ bot.command("start", async (ctx) => {
         //发送产品图
         await ctx.replyWithPhoto("https://ibb.co/kVWrtsrB")
         // 发送菜单。
-        await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！\n（如需咨询详情或获取个性化方案，请回复‘人工+产品编号’，我们会为您安排专属客服提供1对1支持❤）", { reply_markup: menu });
+        await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2026年团队愈加壮大、业绩蒸蒸日上！\n（如需咨询详情或获取个性化方案，请回复‘人工+产品编号’，我们会为您安排专属客服提供1对1支持❤）", { reply_markup: menu });
     }
 });
 
@@ -233,7 +233,7 @@ bot.command("exit", async (ctx) =>{
 
 //处理command1，即start
 bot.command("command1", async (ctx) => {
-    await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2025年团队愈加壮大、业绩蒸蒸日上！\n（如需咨询详情或获取个性化方案，请回复‘人工+产品编号’，我们会为您安排专属客服提供1对1支持❤）", { reply_markup: menu })
+    await ctx.reply("您好,这里是Dolphin客服机器人，可以点击下方按钮跳转对应业务。\nDolphin全体员工向您致以最诚挚的新春祝福，祝愿各位老板2026年团队愈加壮大、业绩蒸蒸日上！\n（如需咨询详情或获取个性化方案，请回复‘人工+产品编号’，我们会为您安排专属客服提供1对1支持❤）", { reply_markup: menu })
 });
 
 // 处理其他的消息并将消息推送至管理员
